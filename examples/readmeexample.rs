@@ -1,11 +1,3 @@
-# Scheduler
-
-**Scheduler** is a Rust project that implements the `Scheduler` trait for different execution contexts such as *threads* or *async loops*.
-
-
-## Basic Example
-
-```rust
 use scheduler::scheduler::Scheduler;
 use scheduler::schedulers::eventloopscheduler::EventLoopScheduler;
 use scheduler::task::TaskFromClosure;
@@ -20,4 +12,3 @@ pub fn main() {
     let task = TaskFromClosure { run_func: closure };
     EventLoopScheduler::run("main", Box::new(task));
 }
-```

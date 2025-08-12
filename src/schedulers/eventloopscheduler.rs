@@ -15,6 +15,22 @@ pub struct EventLoopScheduler {
 }
 
 impl EventLoopScheduler {
+    pub fn new(name: &str) -> EventLoopScheduler {
+        EventLoopScheduler {
+            name: name.to_string(),
+            is_stopped: Arc::new(Mutex::new(false)),
+            immediate_tasks: Arc::new(Mutex::new(VecDeque::new())),
+            delayed_tasks: Arc::new(Mutex::new(BinaryHeap::new())),
+            cond_var: Arc::new((Mutex::new(()), Condvar::new())),
+        }
+    }
+
+    pub fn run(name: &str, task: Box<dyn Task>) {
+        let s = EventLoopScheduler::new(name);
+        s.schedule(task);
+        s.start_loop();
+    }
+
     pub fn start_loop(&self) {
         let is_stopped_mutex = Arc::clone(&self.is_stopped);
         let immediate_tasks_mutex = Arc::clone(&self.immediate_tasks);
@@ -130,5 +146,15 @@ impl Scheduler for EventLoopScheduler {
         let duration = Duration::from_secs_f64(duetime);
         let duetime_datetime = Utc::now() + TimeDelta::from_std(duration).unwrap();
         self.schedule_absolute(duetime_datetime, task);
+    }
+
+    fn stop(&self) {
+        let mut is_stopped_lock = self.is_stopped.lock().unwrap();
+        if *is_stopped_lock {
+            panic!("Scheduler can only be stopped once.")
+        }
+        *is_stopped_lock = true;
+        let (_, cvar) = &*self.cond_var;
+        cvar.notify_one();
     }
 }

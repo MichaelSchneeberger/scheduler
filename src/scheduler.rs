@@ -9,4 +9,5 @@ pub trait Scheduler {
     fn schedule(&self, task: Box<dyn Task>);
     fn schedule_absolute(&self, duetime: DateTime<Utc>, task: Box<dyn Task>);
     fn schedule_relative(&self, duetime: f64, task: Box<dyn Task>);
+    fn stop(&self);
 }

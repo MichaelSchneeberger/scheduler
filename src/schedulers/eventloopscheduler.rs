@@ -123,8 +123,6 @@ impl Scheduler for EventLoopScheduler {
         let lock = Arc::clone(&self.immediate_tasks);
         let mut deque = lock.lock().unwrap();
         let (_, cvar) = &*self.cond_var;
-        // let (lock, cvar) = &*self.cond_var;
-        // let mut started = lock.lock().unwrap();
         deque.push_back(task);
         cvar.notify_one();
     }
@@ -133,8 +131,6 @@ impl Scheduler for EventLoopScheduler {
         let lock = Arc::clone(&self.delayed_tasks);
         let mut binary_heap = lock.lock().unwrap();
         let (_, cvar) = &*self.cond_var;
-        // let (lock, cvar) = &*self.cond_var;
-        // let mut started = lock.lock().unwrap();
         binary_heap.push(DelayedTask {
             task: task,
             duetime: duetime,
@@ -142,8 +138,7 @@ impl Scheduler for EventLoopScheduler {
         cvar.notify_one();
     }
 
-    fn schedule_relative(&self, duetime: f64, task: Box<dyn Task>) {
-        let duration = Duration::from_secs_f64(duetime);
+    fn schedule_relative(&self, duration: Duration, task: Box<dyn Task>) {
         let duetime_datetime = Utc::now() + TimeDelta::from_std(duration).unwrap();
         self.schedule_absolute(duetime_datetime, task);
     }

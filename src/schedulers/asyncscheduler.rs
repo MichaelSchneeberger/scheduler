@@ -1,9 +1,7 @@
 use crate::scheduler::{Scheduler, Task};
 use chrono::TimeDelta;
 use chrono::prelude::{DateTime, Utc};
-use std::cell::RefCell;
 use std::pin::Pin;
-use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tokio::runtime::Runtime;
@@ -12,14 +10,14 @@ use tokio::task::LocalSet;
 use tokio::time::sleep;
 
 enum Command {
-    Task(Box<dyn FnOnce(Arc<dyn Scheduler>) -> Pin<Box<dyn Future<Output = ()>>>>),
+    Task(Box<dyn FnOnce() -> Pin<Box<dyn Future<Output = ()> + Send>> + Send>),
     Stop,
 }
 
 pub struct AsyncScheduler {
     pub name: String,
     pub runtime: Arc<Mutex<Runtime>>,
-    recv: Rc<RefCell<mpsc::UnboundedReceiver<Command>>>,
+    recv: Arc<Mutex<mpsc::UnboundedReceiver<Command>>>,
     send: mpsc::UnboundedSender<Command>,
 }
 
@@ -29,29 +27,26 @@ impl AsyncScheduler {
         AsyncScheduler {
             name: name.to_string(),
             runtime: Arc::new(Mutex::new(Runtime::new().unwrap())),
-            recv: Rc::new(RefCell::new(recv)),
+            recv: Arc::new(Mutex::new(recv)),
             send: send,
         }
     }
 
-    pub fn run(name: &str, task: Box<dyn Task>) {
-        let s = AsyncScheduler::new(name);
-        s.schedule(task);
-        AsyncScheduler::start_loop(Arc::new(s));
+    pub fn run(&self, task: Box<dyn Task>) {
+        self.schedule(task);
+        self.start_loop();
     }
 
-    pub fn start_loop(scheduler: Arc<Self>) {
-        let scheduler = Arc::clone(&scheduler);
-        let lock = Arc::clone(&scheduler.runtime);
-        let recv = Rc::clone(&scheduler.recv);
-
+    pub fn start_loop(&self) {
+        let recv = Arc::clone(&self.recv);
         let local = LocalSet::new();
         local.spawn_local(async move {
+            let recv = Arc::clone(&recv);
+            let mut recv_guard = recv.lock().unwrap();
             loop {
-                match (*recv.borrow_mut()).recv().await {
+                match recv_guard.recv().await {
                     Some(Command::Task(task_fn)) => {
-                        let scheduler = Arc::clone(&scheduler);
-                        tokio::task::spawn_local(async move { task_fn(scheduler).await });
+                        tokio::task::spawn_local(async move { task_fn().await });
                     }
                     Some(Command::Stop) => break,
                     _ => break,
@@ -59,8 +54,9 @@ impl AsyncScheduler {
             }
         });
 
-        let runtime = lock.lock().unwrap();
-        runtime.block_on(local);
+        let runtime = Arc::clone(&self.runtime);
+        let runtime_guard = runtime.lock().unwrap();
+        runtime_guard.block_on(local);
     }
 }
 
@@ -70,7 +66,7 @@ impl Scheduler for AsyncScheduler {
     }
 
     fn schedule(&self, task: Box<dyn Task>) {
-        let task = Command::Task(Box::new(move |s| Box::pin(async move { task.run(&*s) })));
+        let task = Command::Task(Box::new(move || Box::pin(async move { task.run() })));
 
         self.send
             .send(task)
@@ -78,12 +74,12 @@ impl Scheduler for AsyncScheduler {
     }
 
     fn schedule_absolute(&self, duetime: DateTime<Utc>, task: Box<dyn Task>) {
-        let task = Command::Task(Box::new(move |s| {
+        let task = Command::Task(Box::new(move || {
             // let s_rc = Arc::new(s);
             Box::pin(async move {
                 let duration = (duetime - Utc::now()).to_std().unwrap();
                 sleep(duration).await;
-                task.run(&*s)
+                task.run()
             })
         }));
 

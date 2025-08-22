@@ -2,7 +2,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use scheduler::scheduler::{Scheduler, Task};
-use scheduler::schedulers::asyncscheduler::AsyncScheduler;
+use scheduler::schedulers::eventloopscheduler::EventLoopScheduler;
 use scheduler::task::TaskFromClosure;
 
 fn count_down<S: Scheduler + 'static>(scheduler: &Arc<S>, n_iter: u64) -> Box<dyn Task> {
@@ -25,7 +25,7 @@ fn count_down<S: Scheduler + 'static>(scheduler: &Arc<S>, n_iter: u64) -> Box<dy
 }
 
 pub fn main() {
-    let scheduler = Arc::new(AsyncScheduler::new("main"));
+    let scheduler = Arc::new(EventLoopScheduler::new("main"));
     let task = count_down(&scheduler, 5);
     scheduler.run(task);
 }

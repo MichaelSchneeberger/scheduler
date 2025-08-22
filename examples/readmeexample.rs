@@ -1,14 +1,17 @@
 use scheduler::scheduler::Scheduler;
 use scheduler::schedulers::eventloopscheduler::EventLoopScheduler;
 use scheduler::task::TaskFromClosure;
+use std::sync::Arc;
 
 pub fn main() {
+    let main = Arc::new(EventLoopScheduler::new("main"));
     let closure = {
-        move |scheduler: &dyn Scheduler| {
+        let main = Arc::clone(&main);
+        move || {
             println!("task executed");
-            scheduler.stop();
+            main.stop();
         }
     };
     let task = TaskFromClosure { run_func: closure };
-    EventLoopScheduler::run("main", Box::new(task));
+    main.run(Box::new(task));
 }

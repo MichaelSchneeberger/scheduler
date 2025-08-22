@@ -1,4 +1,4 @@
-use crate::scheduler::{Scheduler, Task};
+use crate::scheduler::Task;
 use chrono::prelude::{DateTime, Utc};
 use std::cmp::Ordering;
 
@@ -27,30 +27,15 @@ impl PartialOrd for DelayedTask {
     }
 }
 
-// pub struct TaskFromClosure<F>
-// where
-//     F: Fn(Arc<dyn Scheduler>),
-// {
-//     pub run_func: F,
-// }
-//
-// impl<F: Fn(Arc<dyn Scheduler>) + Send> Task for TaskFromClosure<F> {
-//     fn run(&self, scheduler: Arc<dyn Scheduler>) {
-//         let run_func = &self.run_func;
-//         run_func(scheduler)
-//     }
-// }
-
 pub struct TaskFromClosure<F>
 where
-    F: Fn(&dyn Scheduler),
+    F: Fn(),
 {
     pub run_func: F,
 }
 
-impl<F: Fn(&dyn Scheduler) + Send> Task for TaskFromClosure<F> {
-    fn run(&self, scheduler: &dyn Scheduler) {
-        let run_func = &self.run_func;
-        run_func(scheduler)
+impl<F: Fn() + Send> Task for TaskFromClosure<F> {
+    fn run(&self) {
+        (&self.run_func)()
     }
 }

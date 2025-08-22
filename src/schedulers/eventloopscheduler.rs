@@ -25,10 +25,9 @@ impl EventLoopScheduler {
         }
     }
 
-    pub fn run(name: &str, task: Box<dyn Task>) {
-        let s = EventLoopScheduler::new(name);
-        s.schedule(task);
-        s.start_loop();
+    pub fn run(&self, task: Box<dyn Task>) {
+        self.schedule(task);
+        self.start_loop();
     }
 
     pub fn start_loop(&self) {
@@ -52,7 +51,7 @@ impl EventLoopScheduler {
             };
 
             match immediate_task {
-                Some(task) => task.run(self),
+                Some(task) => task.run(),
 
                 // if no immediate tasks are scheduled, check if a delayed task is due
                 None => {
@@ -68,7 +67,7 @@ impl EventLoopScheduler {
                             None => DelayedTaskAction::NoTasks,
                             Some(first) => {
                                 let duetime = first.duetime;
-                                if TimeDelta::seconds(0) < duetime - Utc::now() {
+                                if duetime - Utc::now() < TimeDelta::seconds(0) {
                                     DelayedTaskAction::ImmediateTask(
                                         binary_heap.pop().unwrap().task,
                                     )
@@ -140,6 +139,7 @@ impl Scheduler for EventLoopScheduler {
 
     fn schedule_relative(&self, duration: Duration, task: Box<dyn Task>) {
         let duetime_datetime = Utc::now() + TimeDelta::from_std(duration).unwrap();
+        // println!("{}", duetime_datetime);
         self.schedule_absolute(duetime_datetime, task);
     }
 

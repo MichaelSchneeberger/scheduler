@@ -1,8 +1,4 @@
-use std::collections::BinaryHeap;
-use std::collections::VecDeque;
 use std::sync::Arc;
-use std::sync::Condvar;
-use std::sync::Mutex;
 use std::thread;
 use std::time::Duration;
 
@@ -34,38 +30,9 @@ fn count_down<S: Scheduler + 'static>(
     Box::new(task)
 }
 
-// fn create_task<'a>(num: u64, pause_ms: u64) -> Box<dyn Task> {
-//     let closure = {
-//         move |scheduler: &dyn Scheduler| {
-//             println!("{}: {}", scheduler.name(), num);
-//
-//             if num > 0 {
-//                 let task = create_task(num - 1, pause_ms);
-//                 scheduler.schedule(task);
-//                 thread::sleep(Duration::from_millis(pause_ms));
-//             }
-//         }
-//     };
-//
-//     let task = TaskFromClosure { run_func: closure };
-//     Box::new(task)
-// }
-
 pub fn main() {
-    let s1 = Arc::new(EventLoopScheduler {
-        name: "s1".to_string(),
-        is_stopped: Arc::new(Mutex::new(false)),
-        immediate_tasks: Arc::new(Mutex::new(VecDeque::new())),
-        delayed_tasks: Arc::new(Mutex::new(BinaryHeap::new())),
-        cond_var: Arc::new((Mutex::new(()), Condvar::new())),
-    });
-    let s2 = Arc::new(EventLoopScheduler {
-        name: "s2".to_string(),
-        is_stopped: Arc::new(Mutex::new(false)),
-        immediate_tasks: Arc::new(Mutex::new(VecDeque::new())),
-        delayed_tasks: Arc::new(Mutex::new(BinaryHeap::new())),
-        cond_var: Arc::new((Mutex::new(()), Condvar::new())),
-    });
+    let s1 = Arc::new(EventLoopScheduler::new("s1"));
+    let s2 = Arc::new(EventLoopScheduler::new("s2"));
 
     let task = count_down(&s1, 5, 1000);
     s1.schedule(task);

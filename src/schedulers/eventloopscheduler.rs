@@ -25,7 +25,7 @@ impl EventLoopScheduler {
         }
     }
 
-    pub fn run(&self, task: Box<dyn Task>) {
+    pub fn run<T: Task + 'static>(&self, task: T) {
         self.schedule(task);
         self.start_loop();
     }
@@ -118,26 +118,26 @@ impl Scheduler for EventLoopScheduler {
         &self.name
     }
 
-    fn schedule(&self, task: Box<dyn Task>) {
+    fn schedule<T: Task + 'static>(&self, task: T) {
         let lock = Arc::clone(&self.immediate_tasks);
         let mut deque = lock.lock().unwrap();
         let (_, cvar) = &*self.cond_var;
-        deque.push_back(task);
+        deque.push_back(Box::new(task));
         cvar.notify_one();
     }
 
-    fn schedule_absolute(&self, duetime: DateTime<Utc>, task: Box<dyn Task>) {
+    fn schedule_absolute<T: Task + 'static>(&self, duetime: DateTime<Utc>, task: T) {
         let lock = Arc::clone(&self.delayed_tasks);
         let mut binary_heap = lock.lock().unwrap();
         let (_, cvar) = &*self.cond_var;
         binary_heap.push(DelayedTask {
-            task: task,
+            task: Box::new(task),
             duetime: duetime,
         });
         cvar.notify_one();
     }
 
-    fn schedule_relative(&self, duration: Duration, task: Box<dyn Task>) {
+    fn schedule_relative<T: Task + 'static>(&self, duration: Duration, task: T) {
         let duetime_datetime = Utc::now() + TimeDelta::from_std(duration).unwrap();
         // println!("{}", duetime_datetime);
         self.schedule_absolute(duetime_datetime, task);

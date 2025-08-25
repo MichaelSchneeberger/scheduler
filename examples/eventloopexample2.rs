@@ -5,29 +5,23 @@ use std::time::Duration;
 use scheduler::scheduler::Scheduler;
 use scheduler::scheduler::Task;
 use scheduler::schedulers::eventloopscheduler::EventLoopScheduler;
-use scheduler::task::TaskFromClosure;
 
 fn count_down<S: Scheduler + 'static>(
     scheduler: &Arc<S>,
     n_iter: u64,
     pause_ms: u64,
-) -> Box<dyn Task> {
+) -> impl Task + 'static {
     let scheduler = Arc::clone(scheduler);
-    let action = {
-        move || {
-            println!("{}: {}", scheduler.name(), n_iter);
+    move || {
+        println!("{}: {}", scheduler.name(), n_iter);
 
-            if n_iter > 0 {
-                let task = count_down(&scheduler, n_iter - 1, pause_ms);
-                scheduler.schedule_relative(Duration::from_millis(pause_ms), task);
-            } else {
-                scheduler.stop();
-            }
+        if n_iter > 0 {
+            let task = count_down(&scheduler, n_iter - 1, pause_ms);
+            scheduler.schedule_relative(Duration::from_millis(pause_ms), task);
+        } else {
+            scheduler.stop();
         }
-    };
-
-    let task = TaskFromClosure { action };
-    Box::new(task)
+    }
 }
 
 pub fn main() {

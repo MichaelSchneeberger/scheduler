@@ -32,7 +32,7 @@ impl AsyncScheduler {
         }
     }
 
-    pub fn run(&self, task: Box<dyn Task>) {
+    pub fn run<T: Task + 'static>(&self, task: T) {
         self.schedule(task);
         self.start_loop();
     }
@@ -73,7 +73,7 @@ impl Scheduler for AsyncScheduler {
         &self.name
     }
 
-    fn schedule(&self, task: Box<dyn Task>) {
+    fn schedule<T: Task + 'static>(&self, task: T) {
         let task = Command::Task(Box::new(move || Box::pin(async move { task.run() })));
 
         self.send
@@ -81,7 +81,7 @@ impl Scheduler for AsyncScheduler {
             .expect("Thread with LocalSet has shut down.");
     }
 
-    fn schedule_absolute(&self, duetime: DateTime<Utc>, task: Box<dyn Task>) {
+    fn schedule_absolute<T: Task + 'static>(&self, duetime: DateTime<Utc>, task: T) {
         let task = Command::Task(Box::new(move || {
             // let s_rc = Arc::new(s);
             Box::pin(async move {
@@ -96,7 +96,7 @@ impl Scheduler for AsyncScheduler {
             .expect("Thread with LocalSet has shut down.")
     }
 
-    fn schedule_relative(&self, duration: Duration, task: Box<dyn Task>) {
+    fn schedule_relative<T: Task + 'static>(&self, duration: Duration, task: T) {
         let duetime_datetime = Utc::now() + TimeDelta::from_std(duration).unwrap();
         self.schedule_absolute(duetime_datetime, task);
     }

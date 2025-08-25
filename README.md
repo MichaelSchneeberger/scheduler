@@ -2,27 +2,46 @@
 
 **Scheduler** is a Rust project that implements the `Scheduler` trait for different execution contexts such as *threads* and *tokio Runtime*.
 The `Scheduler` trait implements the following methods:
-* `schedule(&self, task: Box<dyn Task>)`
-* `schedule_absolute(&self, duetime: DateTime<Utc>, task: Box<dyn Task>)`
-* `schedule_relative(&self, duration: Duration, task: Box<dyn Task>)`
+* `schedule<T: Task + 'static>(&self, task: T)`
+* `schedule_absolute<T: Task + 'static>(&self, duetime: DateTime<Utc>, task: T)`
+* `schedule_relative<T: Task + 'static>(&self, duration: Duration, task: T)`
 
 ## Basic Example
 
 ```rust
-use scheduler::scheduler::Scheduler;
+use scheduler::scheduler::{Scheduler, Task};
 use scheduler::schedulers::eventloopscheduler::EventLoopScheduler;
 use std::sync::Arc;
+use std::time::Duration;
+
+fn count_down<S: Scheduler + 'static>(scheduler: &Arc<S>, n_iter: u64) -> impl Task + 'static {
+    let scheduler = Arc::clone(scheduler);
+    move || {
+        println!("{}: {}", scheduler.name(), n_iter);
+
+        if n_iter > 0 {
+            let task = count_down(&scheduler, n_iter - 1);
+            scheduler.schedule_relative(Duration::from_secs(1), task);
+        } else {
+            scheduler.stop();
+        }
+    }
+}
 
 pub fn main() {
     let scheduler = Arc::new(EventLoopScheduler::new("scheduler"));
-    let action = {
-        let scheduler = Arc::clone(&scheduler);
-        move || {
-            println!("task executed");
-            scheduler.stop();
-        }
-    };
-    scheduler.run(Box::new(action));
+    let task = count_down(&scheduler, 5);
+    scheduler.run(task);
 }
 ```
 
+The code outputs:
+
+```
+scheduler: 5
+scheduler: 4
+scheduler: 3
+scheduler: 2
+scheduler: 1
+scheduler: 0
+```

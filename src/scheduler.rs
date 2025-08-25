@@ -6,10 +6,10 @@ pub trait Task: Send {
     fn run(&self);
 }
 
-pub trait Scheduler: Send + Sync {
+pub trait Scheduler: Send + Sync + 'static {
     fn name(&self) -> &str;
-    fn schedule(&self, task: Box<dyn Task>);
-    fn schedule_absolute(&self, duetime: DateTime<Utc>, task: Box<dyn Task>);
-    fn schedule_relative(&self, duration: Duration, task: Box<dyn Task>);
+    fn schedule<T: Task + 'static>(&self, task: T);
+    fn schedule_absolute<T: Task + 'static>(&self, duetime: DateTime<Utc>, task: T);
+    fn schedule_relative<T: Task + 'static>(&self, duration: Duration, task: T);
     fn stop(&self);
 }

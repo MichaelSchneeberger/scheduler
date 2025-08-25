@@ -13,7 +13,7 @@ fn count_down<S: Scheduler + 'static>(
     pause_ms: u64,
 ) -> Box<dyn Task> {
     let scheduler = Arc::clone(scheduler);
-    let closure = {
+    let action = {
         move || {
             println!("{}: {}", scheduler.name(), n_iter);
 
@@ -26,7 +26,7 @@ fn count_down<S: Scheduler + 'static>(
         }
     };
 
-    let task = TaskFromClosure { run_func: closure };
+    let task = TaskFromClosure { action };
     Box::new(task)
 }
 

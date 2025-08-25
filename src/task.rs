@@ -31,11 +31,17 @@ pub struct TaskFromClosure<F>
 where
     F: Fn(),
 {
-    pub run_func: F,
+    pub action: F,
 }
 
 impl<F: Fn() + Send> Task for TaskFromClosure<F> {
     fn run(&self) {
-        (&self.run_func)()
+        (&self.action)()
+    }
+}
+
+impl<F: Fn() + Send> Task for F {
+    fn run(&self) {
+        self()
     }
 }

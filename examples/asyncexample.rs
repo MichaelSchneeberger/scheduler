@@ -1,25 +1,34 @@
 use std::sync::Arc;
+use std::thread;
 use std::time::Duration;
 
-use scheduler::scheduler::{Scheduler, Task};
+use scheduler::scheduler::Scheduler;
 use scheduler::schedulers::asyncscheduler::AsyncScheduler;
-
-fn count_down<S: Scheduler + 'static>(scheduler: &Arc<S>, n_iter: u64) -> impl Task + 'static {
-    let scheduler = Arc::clone(scheduler);
-    move || {
-        println!("{}: {}", scheduler.name(), n_iter);
-
-        if n_iter > 0 {
-            let task = count_down(&scheduler, n_iter - 1);
-            scheduler.schedule_relative(Duration::from_secs(1), task);
-        } else {
-            scheduler.stop();
-        }
-    }
-}
+use tokio::time::sleep;
 
 pub fn main() {
-    let scheduler = Arc::new(AsyncScheduler::new("scheduler"));
-    let task = count_down(&scheduler, 5);
-    scheduler.run(task);
+    let s1 = Arc::new(AsyncScheduler::new("s1"));
+    let s2 = Arc::new(AsyncScheduler::new("s2"));
+
+    let delay = {
+        let s1 = Arc::clone(&s1);
+        move || {
+            let s1 = Arc::clone(&s1);
+            async move {
+                sleep(Duration::from_secs(1)).await;
+                println!("Stopped.");
+                s1.stop();
+            }
+        }
+    };
+
+    thread::spawn({
+        let s2 = Arc::clone(&s2);
+        move || s2.start_loop()
+    });
+
+    s1.run(move || {
+        s2.schedule_async(delay());
+        // s2.schedule_async(delay);
+    });
 }

@@ -27,19 +27,6 @@ impl PartialOrd for DelayedTask {
     }
 }
 
-pub struct TaskFromClosure<F>
-where
-    F: Fn(),
-{
-    pub action: F,
-}
-
-impl<F: Fn() + Send> Task for TaskFromClosure<F> {
-    fn run(&self) {
-        (&self.action)()
-    }
-}
-
 impl<F: Fn() + Send> Task for F {
     fn run(&self) {
         self()

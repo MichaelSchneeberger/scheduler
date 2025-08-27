@@ -8,15 +8,15 @@ use scheduler::schedulers::eventloopscheduler::EventLoopScheduler;
 
 fn count_down<S: Scheduler + 'static>(
     scheduler: &Arc<S>,
-    n_iter: u64,
+    counter: u64,
     pause_ms: u64,
 ) -> impl Task + 'static {
     let scheduler = Arc::clone(scheduler);
     move || {
-        println!("{}: {}", scheduler.name(), n_iter);
+        println!("{}: {}", scheduler.name(), counter);
 
-        if n_iter > 0 {
-            let task = count_down(&scheduler, n_iter - 1, pause_ms);
+        if counter > 0 {
+            let task = count_down(&scheduler, counter - 1, pause_ms);
             scheduler.schedule_relative(Duration::from_millis(pause_ms), task);
         } else {
             scheduler.stop();

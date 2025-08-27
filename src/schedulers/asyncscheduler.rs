@@ -59,13 +59,13 @@ impl AsyncScheduler {
         runtime_guard.block_on(local);
     }
 
-    // pub fn schedule_async<F: Future<Output = ()> + Send + 'static>(&self, future: F) {
-    //     let task = Command::Task(Box::new(move || Box::pin(future)));
-    //
-    //     self.send
-    //         .send(task)
-    //         .expect("Thread with LocalSet has shut down.");
-    // }
+    pub fn schedule_async<F: Future<Output = ()> + Send + 'static>(&self, future: F) {
+        let task = Command::Task(Box::new(move || Box::pin(future)));
+
+        self.send
+            .send(task)
+            .expect("Thread with LocalSet has shut down.");
+    }
 }
 
 impl Scheduler for AsyncScheduler {

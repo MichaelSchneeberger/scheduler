@@ -8,19 +8,21 @@ The `Scheduler` trait implements the following methods:
 
 ## Basic Example
 
+The following example schedules a task every second until a counter value becomes zero. 
+
 ```rust
 use scheduler::scheduler::{Scheduler, Task};
 use scheduler::schedulers::eventloopscheduler::EventLoopScheduler;
 use std::sync::Arc;
 use std::time::Duration;
 
-fn count_down<S: Scheduler + 'static>(scheduler: &Arc<S>, n_iter: u64) -> impl Task + 'static {
+fn count_down<S: Scheduler + 'static>(scheduler: &Arc<S>, counter: u64) -> impl Task + 'static {
     let scheduler = Arc::clone(scheduler);
     move || {
-        println!("{}: {}", scheduler.name(), n_iter);
+        println!("{}: {}", scheduler.name(), counter);
 
-        if n_iter > 0 {
-            let task = count_down(&scheduler, n_iter - 1);
+        if counter > 0 {
+            let task = count_down(&scheduler, counter - 1);
             scheduler.schedule_relative(Duration::from_secs(1), task);
         } else {
             scheduler.stop();

@@ -1,14 +1,14 @@
 # Scheduler
 
 **Scheduler** is a Rust project that implements the `Scheduler` trait for different execution contexts such as *threads* and *tokio Runtime*.
-The `Scheduler` trait implements the following methods:
+The `Scheduler` trait (inspired by the ReactiveX framework) implements the following methods:
 * `schedule<T: Task + 'static>(&self, task: T)`
 * `schedule_absolute<T: Task + 'static>(&self, duetime: DateTime<Utc>, task: T)`
 * `schedule_relative<T: Task + 'static>(&self, duration: Duration, task: T)`
 
 ## Basic Example
 
-The following example schedules a task every second until a counter value becomes zero. 
+The example schedules a task every second until a counter value becomes zero. 
 
 ```rust
 use scheduler::scheduler::{Scheduler, Task};

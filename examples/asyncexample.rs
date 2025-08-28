@@ -29,6 +29,5 @@ pub fn main() {
 
     s1.run(move || {
         s2.schedule_async(delay());
-        // s2.schedule_async(delay);
     });
 }

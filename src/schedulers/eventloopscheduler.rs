@@ -6,15 +6,15 @@ use std::collections::{BinaryHeap, VecDeque};
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::Duration;
 
-pub struct State {
-    pub is_stopped: bool,
-    pub immediate_tasks: VecDeque<Box<dyn Task>>,
-    pub delayed_tasks: BinaryHeap<DelayedTask>,
+struct State {
+    is_stopped: bool,
+    immediate_tasks: VecDeque<Box<dyn Task>>,
+    delayed_tasks: BinaryHeap<DelayedTask>,
 }
 
 pub struct EventLoopScheduler {
     pub name: String,
-    pub state_cv: Arc<(Mutex<State>, Condvar)>,
+    state_cv: Arc<(Mutex<State>, Condvar)>,
 }
 
 impl EventLoopScheduler {
@@ -93,6 +93,7 @@ impl EventLoopScheduler {
                             if deque.is_empty() {
                                 match delayed_task {
                                     DelayedTaskAction::NextDueTime(duetime) => {
+                                        // Wait for a new task or until the next delayed task is due.
                                         if TimeDelta::seconds(0) < duetime - Utc::now() {
                                             let _ = cond_var
                                                 .wait_timeout(

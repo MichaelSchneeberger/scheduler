@@ -6,22 +6,28 @@ use std::collections::{BinaryHeap, VecDeque};
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::Duration;
 
+pub struct State {
+    pub is_stopped: bool,
+    pub immediate_tasks: VecDeque<Box<dyn Task>>,
+    pub delayed_tasks: BinaryHeap<DelayedTask>,
+}
+
 pub struct EventLoopScheduler {
     pub name: String,
-    pub is_stopped: Arc<Mutex<bool>>,
-    pub immediate_tasks: Arc<Mutex<VecDeque<Box<dyn Task>>>>,
-    pub delayed_tasks: Arc<Mutex<BinaryHeap<DelayedTask>>>,
-    pub cond_var: Arc<(Mutex<()>, Condvar)>,
+    pub state_cv: Arc<(Mutex<State>, Condvar)>,
 }
 
 impl EventLoopScheduler {
     pub fn new(name: &str) -> EventLoopScheduler {
+        let state = State {
+            is_stopped: false,
+            immediate_tasks: VecDeque::new(),
+            delayed_tasks: BinaryHeap::new(),
+        };
+
         EventLoopScheduler {
             name: name.to_string(),
-            is_stopped: Arc::new(Mutex::new(false)),
-            immediate_tasks: Arc::new(Mutex::new(VecDeque::new())),
-            delayed_tasks: Arc::new(Mutex::new(BinaryHeap::new())),
-            cond_var: Arc::new((Mutex::new(()), Condvar::new())),
+            state_cv: Arc::new((Mutex::new(state), Condvar::new())),
         }
     }
 
@@ -31,14 +37,13 @@ impl EventLoopScheduler {
     }
 
     pub fn start_loop(&self) {
-        let is_stopped_mutex = Arc::clone(&self.is_stopped);
-        let immediate_tasks_mutex = Arc::clone(&self.immediate_tasks);
-        let delayed_tasks_mutex = Arc::clone(&self.delayed_tasks);
+        let state_cv = Arc::clone(&self.state_cv);
+        let (state, cond_var) = &*state_cv;
 
         loop {
             let is_stopped = {
-                let result = is_stopped_mutex.lock().unwrap();
-                *result
+                let result = (*state.lock().unwrap()).is_stopped;
+                result
             };
 
             if is_stopped {
@@ -46,7 +51,7 @@ impl EventLoopScheduler {
             }
 
             let immediate_task = {
-                let mut deque = immediate_tasks_mutex.lock().unwrap();
+                let deque = &mut(*state.lock().unwrap()).immediate_tasks;
                 deque.pop_front()
             };
 
@@ -61,7 +66,7 @@ impl EventLoopScheduler {
                         ImmediateTask(Box<dyn Task>),
                     }
                     let delayed_task = {
-                        let mut binary_heap = delayed_tasks_mutex.lock().unwrap();
+                        let binary_heap = &mut (*state.lock().unwrap()).delayed_tasks;
 
                         match binary_heap.peek() {
                             None => DelayedTaskAction::NoTasks,
@@ -78,29 +83,28 @@ impl EventLoopScheduler {
                         }
                     };
 
-                    let mut deque = immediate_tasks_mutex.lock().unwrap();
+                    let mut state_guard = state.lock().unwrap();
+                    let deque = &mut (*state_guard).immediate_tasks;
                     match delayed_task {
                         DelayedTaskAction::ImmediateTask(task) => {
                             deque.push_back(task);
                         }
                         _ => {
                             if deque.is_empty() {
-                                let (lock, cvar) = &*self.cond_var;
-                                let mut guard = lock.lock().unwrap();
                                 match delayed_task {
                                     DelayedTaskAction::NextDueTime(duetime) => {
                                         if TimeDelta::seconds(0) < duetime - Utc::now() {
-                                            let _ = cvar
+                                            let _ = cond_var
                                                 .wait_timeout(
-                                                    guard,
+                                                    state_guard,
                                                     (duetime - Utc::now()).to_std().unwrap(),
                                                 )
                                                 .unwrap();
                                         }
                                     }
                                     DelayedTaskAction::NoTasks => {
-                                        guard = cvar.wait(guard).unwrap();
-                                        drop(guard);
+                                        state_guard = cond_var.wait(state_guard).unwrap();
+                                        drop(state_guard);
                                     }
                                     _ => {}
                                 }
@@ -119,37 +123,37 @@ impl Scheduler for EventLoopScheduler {
     }
 
     fn schedule<T: Task + 'static>(&self, task: T) {
-        let lock = Arc::clone(&self.immediate_tasks);
-        let mut deque = lock.lock().unwrap();
-        let (_, cvar) = &*self.cond_var;
+        let state_cv = Arc::clone(&self.state_cv);
+        let (state, cond_var) = &*state_cv;
+        let deque = &mut (*state.lock().unwrap()).immediate_tasks;
         deque.push_back(Box::new(task));
-        cvar.notify_one();
+        cond_var.notify_one();
     }
 
     fn schedule_absolute<T: Task + 'static>(&self, duetime: DateTime<Utc>, task: T) {
-        let lock = Arc::clone(&self.delayed_tasks);
-        let mut binary_heap = lock.lock().unwrap();
-        let (_, cvar) = &*self.cond_var;
+        let state_cv = Arc::clone(&self.state_cv);
+        let (state, cond_var) = &*state_cv;
+        let binary_heap = &mut (*state.lock().unwrap()).delayed_tasks;
         binary_heap.push(DelayedTask {
             task: Box::new(task),
             duetime: duetime,
         });
-        cvar.notify_one();
+        cond_var.notify_one();
     }
 
     fn schedule_relative<T: Task + 'static>(&self, duration: Duration, task: T) {
         let duetime_datetime = Utc::now() + TimeDelta::from_std(duration).unwrap();
-        // println!("{}", duetime_datetime);
         self.schedule_absolute(duetime_datetime, task);
     }
 
     fn stop(&self) {
-        let mut is_stopped_lock = self.is_stopped.lock().unwrap();
-        if *is_stopped_lock {
+        let state_cv = Arc::clone(&self.state_cv);
+        let (state, cond_var) = &*state_cv;
+        let is_stopped_ref = &mut (*state.lock().unwrap()).is_stopped;
+        if *is_stopped_ref {
             panic!("Scheduler can only be stopped once.")
         }
-        *is_stopped_lock = true;
-        let (_, cvar) = &*self.cond_var;
-        cvar.notify_one();
+        *is_stopped_ref = true;
+        cond_var.notify_one();
     }
 }

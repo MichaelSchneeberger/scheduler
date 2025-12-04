@@ -3,7 +3,8 @@ use std::time::Duration;
 use chrono::prelude::{DateTime, Utc};
 
 pub trait Task: Send {
-    fn run(&self);
+    // fn run(&self);
+    fn run(self : Box<Self>);
 }
 
 pub trait Scheduler: Send + Sync + 'static {

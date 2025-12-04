@@ -27,8 +27,14 @@ impl PartialOrd for DelayedTask {
     }
 }
 
-impl<F: Fn() + Send> Task for F {
-    fn run(&self) {
+impl<F: FnOnce() + Send> Task for F {
+    fn run(self: Box<Self>) {
         self()
     }
 }
+
+// impl<F: Fn() + Send> Task for F {
+//     fn run(&self) {
+//         self()
+//     }
+// }

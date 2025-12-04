@@ -10,7 +10,7 @@ use tokio::task::LocalSet;
 use tokio::time::sleep;
 
 enum Command {
-    Task(Box<dyn FnOnce() -> Pin<Box<dyn Future<Output = ()> + Send>> + Send>),
+    Task(Pin<Box<dyn Future<Output = ()> + Send>>),
     Stop,
 }
 
@@ -46,7 +46,7 @@ impl AsyncScheduler {
             loop {
                 match recv_guard.recv().await {
                     Some(Command::Task(task_fn)) => {
-                        tokio::task::spawn_local(async move { task_fn().await });
+                        tokio::task::spawn_local(async move { task_fn.await });
                     }
                     Some(Command::Stop) => break,
                     _ => break,
@@ -60,7 +60,7 @@ impl AsyncScheduler {
     }
 
     pub fn schedule_async<F: Future<Output = ()> + Send + 'static>(&self, future: F) {
-        let task = Command::Task(Box::new(move || Box::pin(future)));
+        let task = Command::Task(Box::pin(future));
 
         self.send
             .send(task)
@@ -74,7 +74,8 @@ impl Scheduler for AsyncScheduler {
     }
 
     fn schedule<T: Task + 'static>(&self, task: T) {
-        let task = Command::Task(Box::new(move || Box::pin(async move { task.run() })));
+        let boxed_task = Box::new(task);
+        let task = Command::Task(Box::pin(async move { boxed_task.run() }));
 
         self.send
             .send(task)
@@ -82,14 +83,15 @@ impl Scheduler for AsyncScheduler {
     }
 
     fn schedule_absolute<T: Task + 'static>(&self, duetime: DateTime<Utc>, task: T) {
-        let task = Command::Task(Box::new(move || {
-            // let s_rc = Arc::new(s);
+
+        let boxed_task = Box::new(task);
+        let task = Command::Task(            // let s_rc = Arc::new(s);
             Box::pin(async move {
                 let duration = (duetime - Utc::now()).to_std().unwrap();
                 sleep(duration).await;
-                task.run()
+                boxed_task.run()
             })
-        }));
+        );
 
         self.send
             .send(task)

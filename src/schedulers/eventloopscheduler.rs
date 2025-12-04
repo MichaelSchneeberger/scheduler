@@ -67,7 +67,7 @@ impl EventLoopScheduler {
                     }
 
                     // A delayed task is due if its duetime is in the past
-                    let delayed_task_action = {
+                    let next_delayed_task = {
                         let binary_heap = &mut (*state.lock().unwrap()).delayed_tasks;
 
                         match binary_heap.peek() {
@@ -85,21 +85,25 @@ impl EventLoopScheduler {
                         }
                     };
 
-                    // Wait for a new task to be scheduled or for the next delayed task to become due.
                     // Here, the 'state' mutex is locked, but will be unlocked again throught the Condvar
-                    // functions wait_timeout and wait.
+                    // wait_timeout and wait functions.
                     let mut state_guard = state.lock().unwrap();
                     let deque = &mut (*state_guard).immediate_tasks;
-                    match delayed_task_action {
+                    match next_delayed_task {
                         NextDelayedTask::ImmediateTask(task) => {
                             deque.push_back(task);
                         }
+
                         _ => {
-                            // check whether there are no new immediate tasks
+                            // check whether there are still no new immediate tasks, otherwise
+                            // prioritize those first
                             if deque.is_empty() {
-                                match delayed_task_action {
+                                match next_delayed_task {
+
+                                    // Wait for a new task to be scheduled or for the next delayed task to become due.
                                     NextDelayedTask::NextDueTime(duetime) => {
-                                        // Duetime of the next delayed task still is in the future
+
+                                        // Duetime of the next delayed task is still in the future
                                         if TimeDelta::seconds(0) < duetime - Utc::now() {
                                             let _ = cond_var
                                                 .wait_timeout(
@@ -109,14 +113,17 @@ impl EventLoopScheduler {
                                                 .unwrap();
                                         }
 
-                                        // Duetime of the next delayed task is now in the past
-                                        // Pass to the next loop iteration
+                                        // Duetime of the next delayed task is now due; run it in the
+                                        // next loop iteration
                                         else {}
                                     }
+
+                                    // No delayed tasks scheduled; wait for a new task to be scheduled
                                     NextDelayedTask::NoTasks => {
                                         state_guard = cond_var.wait(state_guard).unwrap();
                                         drop(state_guard);
                                     }
+
                                     _ => {}
                                 }
                             }

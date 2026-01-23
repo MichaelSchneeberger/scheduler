@@ -37,12 +37,11 @@ impl EventLoopScheduler {
     }
 
     pub fn start_loop(&self) {
-        let state_cv = Arc::clone(&self.state_cv);
-        let (state, cond_var) = &*state_cv;
+        let (lock, cond_var) = &*self.state_cv;
 
         loop {
             let is_stopped = {
-                let result = (*state.lock().unwrap()).is_stopped;
+                let result = (*lock.lock().unwrap()).is_stopped;
                 result
             };
 
@@ -51,8 +50,8 @@ impl EventLoopScheduler {
             }
 
             let immediate_task = {
-                let deque = &mut(*state.lock().unwrap()).immediate_tasks;
-                deque.pop_front()
+                let mut state = lock.lock().unwrap();
+                state.immediate_tasks.pop_front()
             };
 
             match immediate_task {
@@ -68,15 +67,15 @@ impl EventLoopScheduler {
 
                     // A delayed task is due if its duetime is in the past
                     let next_delayed_task = {
-                        let binary_heap = &mut (*state.lock().unwrap()).delayed_tasks;
+                        let mut state = lock.lock().unwrap();
 
-                        match binary_heap.peek() {
+                        match state.delayed_tasks.peek() {
                             None => NextDelayedTask::NoTasks,
                             Some(first) => {
                                 let duetime = first.duetime;
                                 if duetime - Utc::now() < TimeDelta::seconds(0) {
                                     NextDelayedTask::ImmediateTask(
-                                        binary_heap.pop().unwrap().task,
+                                        state.delayed_tasks.pop().unwrap().task,
                                     )
                                 } else {
                                     NextDelayedTask::NextDueTime(first.duetime)
@@ -87,17 +86,17 @@ impl EventLoopScheduler {
 
                     // Here, the 'state' mutex is locked, but will be unlocked again throught the Condvar
                     // wait_timeout and wait functions.
-                    let mut state_guard = state.lock().unwrap();
-                    let deque = &mut (*state_guard).immediate_tasks;
+
+                    let mut state = lock.lock().unwrap();
                     match next_delayed_task {
                         NextDelayedTask::ImmediateTask(task) => {
-                            deque.push_back(task);
+                            state.immediate_tasks.push_back(task);
                         }
 
                         _ => {
                             // check whether there are still no new immediate tasks, otherwise
                             // prioritize those first
-                            if deque.is_empty() {
+                            if state.immediate_tasks.is_empty() {
                                 match next_delayed_task {
 
                                     // Wait for a new task to be scheduled or for the next delayed task to become due.
@@ -107,7 +106,7 @@ impl EventLoopScheduler {
                                         if TimeDelta::seconds(0) < duetime - Utc::now() {
                                             let _ = cond_var
                                                 .wait_timeout(
-                                                    state_guard,
+                                                    state,
                                                     (duetime - Utc::now()).to_std().unwrap(),
                                                 )
                                                 .unwrap();
@@ -120,8 +119,9 @@ impl EventLoopScheduler {
 
                                     // No delayed tasks scheduled; wait for a new task to be scheduled
                                     NextDelayedTask::NoTasks => {
-                                        state_guard = cond_var.wait(state_guard).unwrap();
-                                        drop(state_guard);
+                                        let _result = cond_var.wait(state).unwrap();
+                                        // state = cond_var.wait(state).unwrap();
+                                        // drop(state);
                                     }
 
                                     _ => {}
@@ -141,16 +141,14 @@ impl Scheduler for EventLoopScheduler {
     }
 
     fn schedule<T: Task + 'static>(&self, task: T) {
-        let state_cv = Arc::clone(&self.state_cv);
-        let (state, cond_var) = &*state_cv;
+        let (state, cond_var) = &*self.state_cv;
         let deque = &mut (*state.lock().unwrap()).immediate_tasks;
         deque.push_back(Box::new(task));
         cond_var.notify_one();
     }
 
     fn schedule_absolute<T: Task + 'static>(&self, duetime: DateTime<Utc>, task: T) {
-        let state_cv = Arc::clone(&self.state_cv);
-        let (state, cond_var) = &*state_cv;
+        let (state, cond_var) = &*self.state_cv;
         let binary_heap = &mut (*state.lock().unwrap()).delayed_tasks;
         binary_heap.push(DelayedTask {
             task: Box::new(task),
@@ -165,8 +163,8 @@ impl Scheduler for EventLoopScheduler {
     }
 
     fn stop(&self) {
-        let state_cv = Arc::clone(&self.state_cv);
-        let (state, cond_var) = &*state_cv;
+        let (state, cond_var) = &*self.state_cv;
+
         let is_stopped_ref = &mut (*state.lock().unwrap()).is_stopped;
         if *is_stopped_ref {
             panic!("Scheduler can only be stopped once.")
